@@ -1,0 +1,74 @@
+name: support-ticket-triage
+version: "1.0.0"
+description: >
+  A real-world customer support ticket triage environment where an AI agent
+  must classify ticket priority, route to the correct department, and draft
+  professional responses. Simulates tasks performed daily by support teams
+  at software companies.
+
+author: Krishnakanthula Shivamani
+tags:
+  - openenv
+  - support
+  - triage
+  - nlp
+  - real-world
+
+tasks:
+  - id: classify_priority
+    name: Classify Ticket Priority
+    difficulty: easy
+    description: >
+      Given a customer support ticket, classify its priority as one of:
+      low, medium, high, critical.
+    score_range: [0.0, 1.0]
+    action_space:
+      priority: string  # "low" | "medium" | "high" | "critical"
+
+  - id: route_department
+    name: Route to Department
+    difficulty: medium
+    description: >
+      Given a customer support ticket, route it to the correct department:
+      billing, technical, general, returns, or account.
+    score_range: [0.0, 1.0]
+    action_space:
+      department: string  # "billing" | "technical" | "general" | "returns" | "account"
+
+  - id: draft_response
+    name: Draft Customer Response
+    difficulty: hard
+    description: >
+      Given a customer support ticket, draft a professional, empathetic,
+      and helpful response. Scored on: greeting, empathy, action/next-steps,
+      professional closing, and ticket relevance.
+    score_range: [0.0, 1.0]
+    action_space:
+      response_text: string
+
+observation_space:
+  ticket_id: string
+  subject: string
+  body: string
+  customer_tier: string     # "free" | "pro" | "enterprise"
+  previous_contacts: int
+  task: string
+  task_description: string
+
+reward:
+  type: scalar
+  range: [0.0, 1.0]
+  description: >
+    Partial-credit reward. For classify/route: 1.0 = correct, 0.5 = adjacent,
+    0.0 = wrong or invalid. For draft_response: rubric-based across 5 criteria.
+
+interface:
+  reset: returns Observation
+  step: accepts Action, returns (Observation, Reward, done, info)
+  state: returns current environment state dict
+
+runtime:
+  language: python
+  min_python: "3.10"
+  dependencies:
+    - pydantic>=2.0
