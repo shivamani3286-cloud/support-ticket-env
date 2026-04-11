@@ -148,15 +148,6 @@ GOOD_RESPONSE_KEYWORDS = {
 # ─── Environment ─────────────────────────────────────────────────────────────
 
 class SupportTicketEnv:
-    """
-    OpenEnv-compatible Customer Support Ticket Triage environment.
-
-    Tasks:
-      Task 1 (easy)   - Classify ticket priority: low / medium / high / critical
-      Task 2 (medium) - Route ticket to correct department
-      Task 3 (hard)   - Draft an appropriate customer response
-    """
-
     TASKS = [
         {
             "id": "classify_priority",
@@ -197,20 +188,13 @@ class SupportTicketEnv:
         self._done = False
         self._step_count = 0
 
-    # ── OpenEnv Interface ────────────────────────────────────────────────────
-
     def reset(self) -> Observation:
-        """Reset environment and return initial observation."""
         self._current_ticket = self._rng.choice(TICKETS)
         self._done = False
         self._step_count = 0
         return self._make_observation()
 
     def step(self, action: Action) -> tuple[Observation, Reward, bool, dict]:
-        """
-        Execute action and return (observation, reward, done, info).
-        Each episode is a single step (one ticket, one action).
-        """
         if self._done:
             raise RuntimeError("Episode is done. Call reset() first.")
 
@@ -227,7 +211,6 @@ class SupportTicketEnv:
         return obs, reward, self._done, info
 
     def state(self) -> dict:
-        """Return current environment state."""
         return {
             "task_id": self.task_id,
             "done": self._done,
@@ -246,9 +229,9 @@ class SupportTicketEnv:
             return self._grade_response(action)
 
     def _grade_classify(self, action: Action) -> Reward:
-        """Grade: priority classification (easy)."""
+        """Grade: priority classification — scores strictly between (0, 1)."""
         if not action.priority:
-            return Reward(value=0.0, reason="No priority provided.")
+            return Reward(value=0.01, reason="No priority provided.")
 
         predicted = action.priority.strip().lower()
         true_val = self._current_ticket["true_priority"].value
@@ -256,43 +239,41 @@ class SupportTicketEnv:
         priority_order = ["low", "medium", "high", "critical"]
 
         if predicted not in priority_order:
-            return Reward(value=0.0, reason=f"Invalid priority value: '{predicted}'.")
+            return Reward(value=0.01, reason=f"Invalid priority value: '{predicted}'.")
 
         if predicted == true_val:
-            return Reward(value=1.0, reason="Correct priority classification!")
+            return Reward(value=0.99, reason="Correct priority classification!")
 
-        # Partial credit for adjacent priority levels
         diff = abs(priority_order.index(predicted) - priority_order.index(true_val))
         if diff == 1:
             return Reward(value=0.5, reason=f"Off by one level. Expected '{true_val}', got '{predicted}'.")
-        return Reward(value=0.0, reason=f"Wrong priority. Expected '{true_val}', got '{predicted}'.")
+        return Reward(value=0.01, reason=f"Wrong priority. Expected '{true_val}', got '{predicted}'.")
 
     def _grade_route(self, action: Action) -> Reward:
-        """Grade: department routing (medium)."""
+        """Grade: department routing — scores strictly between (0, 1)."""
         if not action.department:
-            return Reward(value=0.0, reason="No department provided.")
+            return Reward(value=0.01, reason="No department provided.")
 
         predicted = action.department.strip().lower()
         true_val = self._current_ticket["true_department"].value
 
         valid_depts = [d.value for d in Department]
         if predicted not in valid_depts:
-            return Reward(value=0.0, reason=f"Invalid department: '{predicted}'.")
+            return Reward(value=0.01, reason=f"Invalid department: '{predicted}'.")
 
         if predicted == true_val:
-            return Reward(value=1.0, reason="Correct department routing!")
+            return Reward(value=0.99, reason="Correct department routing!")
 
-        # Partial credit: billing & returns are related
         related = {("billing", "returns"), ("returns", "billing")}
         if (predicted, true_val) in related:
             return Reward(value=0.4, reason=f"Close but wrong. Expected '{true_val}', got '{predicted}'.")
 
-        return Reward(value=0.0, reason=f"Wrong department. Expected '{true_val}', got '{predicted}'.")
+        return Reward(value=0.01, reason=f"Wrong department. Expected '{true_val}', got '{predicted}'.")
 
     def _grade_response(self, action: Action) -> Reward:
-        """Grade: response drafting (hard) — rubric-based partial credit."""
+        """Grade: response drafting — rubric-based, scores strictly between (0, 1)."""
         if not action.response_text:
-            return Reward(value=0.0, reason="No response text provided.")
+            return Reward(value=0.01, reason="No response text provided.")
 
         text = action.response_text.lower()
         score = 0.0
@@ -334,7 +315,8 @@ class SupportTicketEnv:
         else:
             reasons.append("Response seems generic / irrelevant (-0.15)")
 
-        score = round(min(max(score, 0.0), 1.0), 2)
+        # Clip to strictly (0, 1) — never exactly 0.0 or 1.0
+        score = round(min(max(score, 0.01), 0.99), 4)
         return Reward(value=score, reason=" | ".join(reasons))
 
     # ── Helpers ──────────────────────────────────────────────────────────────
@@ -353,7 +335,7 @@ class SupportTicketEnv:
         )
 
 
-# ─── Task Registry (for openenv validate) ────────────────────────────────────
+# ─── Task Registry ────────────────────────────────────────────────────────────
 
 def get_tasks():
     return SupportTicketEnv.TASKS
@@ -372,7 +354,6 @@ if __name__ == "__main__":
         env = make_env(task, seed=42)
         obs = env.reset()
         print(f"Ticket: [{obs.subject}] — {obs.body[:80]}...")
-        print(f"Customer tier: {obs.customer_tier} | Prior contacts: {obs.previous_contacts}")
 
         if task == "classify_priority":
             action = Action(priority="high")
